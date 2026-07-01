@@ -1,0 +1,9 @@
+Host bpi
+    HostName 10.0.1.2
+    User __REMOTE_USER__
+    ControlMaster auto
+    ControlPath /run/ssh-control/cm-%r@%h:%p.sock
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    StrictHostKeyChecking accept-new
+    UserKnownHostsFile /run/ssh-control/known_hosts

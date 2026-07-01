@@ -1,0 +1,26 @@
+{
+	skip_install_trust
+	auto_https disable_redirects
+	servers {
+		protocols h1 h2
+	}
+}
+
+*.dev.localhost {
+	bind 127.0.0.1
+	tls internal
+
+	map {labels.2} {upstream_port} {
+		import /etc/caddy/services_map_entries.caddy
+		default 0
+	}
+
+	@unmapped expression {upstream_port} == "0"
+	handle @unmapped {
+		respond "unknown service: {labels.2}.dev.localhost — add it to services.map" 404
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:{upstream_port}
+	}
+}
