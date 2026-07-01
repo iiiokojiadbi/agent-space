@@ -1,0 +1,25 @@
+sync:
+  defaults:
+    mode: two-way-resolved
+    permissions:
+      defaultFileMode: 0644
+      defaultDirectoryMode: 0755
+    ignore:
+      paths:
+        - node_modules
+        - .git
+        - dist
+        - build
+        - .next
+        - .turbo
+        - .cache
+        - "*.log"
+        - mutagen.yml
+        - compose.override.yml
+        # добавь сюда приватные конфиги/директории, которые не должны синкаться
+
+  # Пример. Скопируй этот файл в mutagen.yml и допиши свои проекты.
+  # На каждый проект нужен ещё bind-mount в compose.override.yml (folders.volumes).
+  # myapp:
+  #   alpha: "/sync-source/myapp"
+  #   beta: "dev:/home/<user>/general/myapp"

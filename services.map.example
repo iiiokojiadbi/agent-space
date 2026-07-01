@@ -1,0 +1,4 @@
+# <имя> <порт> — имя.dev.localhost → 127.0.0.1:<порт> на dev-машине
+# Скопируй в services.map (gitignored) и допиши свои сервисы.
+status 4444
+grafana 3000

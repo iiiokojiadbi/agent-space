@@ -1,0 +1,98 @@
+# Исходники образов тянутся из git при build — в рабочей папке нужен только этот
+# файл + host-конфиги (.env, compose.override.yml, mutagen.yml, services.map).
+# Пин на ветку. Для детерминизма замени main на конкретный коммит: ...git#<sha>.
+# Значения build-args (REMOTE_USER, прокси) берутся из .env рядом с этим файлом.
+x-ctx: &ctx "https://github.com/iiiokojiadbi/agent-space.git#main"
+
+# source-переменные с префиксом AS_, т.к. HTTP_PROXY и т.п. — предопределённые
+# в Docker: он перетирает их из своего proxy-конфига, игнорируя .env
+x-proxy-args: &proxy-args
+  HTTP_PROXY: ${AS_HTTP_PROXY:-}
+  HTTPS_PROXY: ${AS_HTTPS_PROXY:-}
+  NO_PROXY: ${AS_NO_PROXY:-}
+
+# host.docker.internal должен резолвиться при СБОРКЕ (apk через хостовый прокси) —
+# на Linux это требует host-gateway, иначе прокси недостижим
+x-build-hosts: &build-hosts
+  - "host.docker.internal:host-gateway"
+
+# сервисы без ssh_config (links, gateway)
+x-build: &build
+  context: *ctx
+  extra_hosts: *build-hosts
+  args:
+    <<: *proxy-args
+
+# сервисы, копирующие shared/ssh_config (agent, folders, portmap)
+x-build-ssh: &build-ssh
+  context: *ctx
+  extra_hosts: *build-hosts
+  args:
+    <<: *proxy-args
+    REMOTE_USER: ${REMOTE_USER:-user}
+
+services:
+  links:
+    build:
+      <<: *build
+      dockerfile: links/Dockerfile
+    image: as-links:latest
+    hostname: links
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:2375:2375"
+
+  agent:
+    build:
+      <<: *build-ssh
+      dockerfile: agent/Dockerfile
+    image: as-agent:latest
+    network_mode: host
+    command: ["sleep", "infinity"]
+    volumes:
+      - ssh-control:/run/ssh-control
+
+  folders:
+    build:
+      <<: *build-ssh
+      dockerfile: folders/Dockerfile
+    image: as-folders:latest
+    hostname: folders
+    restart: unless-stopped
+    depends_on:
+      - agent
+    volumes:
+      - ./mutagen.yml:/workspace/mutagen.yml:ro
+      - ssh-control:/run/ssh-control
+
+  portmap:
+    build:
+      <<: *build-ssh
+      dockerfile: portmap/Dockerfile
+    image: as-portmap:latest
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      - agent
+    volumes:
+      - ./services.map:/run/services.map:ro
+      - ssh-control:/run/ssh-control
+
+  gateway:
+    build:
+      <<: *build
+      dockerfile: gateway/Dockerfile
+    image: as-gateway:latest
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      - portmap
+    volumes:
+      - ./services.map:/etc/caddy/services.map:ro
+      - caddy-data:/data
+
+volumes:
+  ssh-control:
+  caddy-data:
