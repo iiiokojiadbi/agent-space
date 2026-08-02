@@ -26,9 +26,12 @@ while true; do
 	mutagen project terminate 2>/dev/null || true
 	rm -f mutagen.yml.lock
 
+	# Пауза длинная намеренно: неудачный start обычно означает, что мастер уже не
+	# живой, и частый ретрай оборачивается пачкой соединений в секунду. Для защиты
+	# от подбора на той стороне это неотличимо от атаки, и мост банится целиком.
 	if ! mutagen project start; then
-		echo "[folders] project start failed, retrying"
-		sleep 5
+		echo "[folders] project start failed, retrying in 60s"
+		sleep 60
 		continue
 	fi
 
