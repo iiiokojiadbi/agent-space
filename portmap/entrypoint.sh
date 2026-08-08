@@ -23,24 +23,41 @@ desired_ports() {
 	done
 }
 
-# снять форварды, оставшиеся от прошлого экземпляра контейнера (мастер их переживает) —
-# иначе active[] после рестарта пуст, forward на уже занятый порт спамит ошибками, а
-# снять его потом некому (утечка)
-if ssh -O check bpi >/dev/null 2>&1; then
+master_alive() { ssh -O check bpi >/dev/null 2>&1; }
+
+# Снять форварды, оставшиеся от прошлого экземпляра контейнера: мастер их переживает,
+# и без очистки active[] после рестарта пуст, а forward на уже занятый порт падает —
+# причём занят он собственным же осиротевшим форвардом, поэтому на хосте его не видно
+# ни в lsof, ни в netstat (слушает sshd мастера, а не отдельный процесс).
+#
+# Вызывается при КАЖДОМ восстановлении соединения, а не однократно на старте: если
+# мастера в момент запуска не было, единичная очистка молча пропускалась, и потом
+# форварды не поднимались до тех пор, пока мастер сам не переподключится.
+cleanup_stale() {
+	master_alive || return 0
+	local p
 	for p in $(desired_ports); do
 		ssh -O cancel -L "127.0.0.1:$p:127.0.0.1:$p" bpi 2>/dev/null || true
 	done
-fi
+}
 
 declare -A active failed
+master_was_down=1
 
 while true; do
-	if ! ssh -O check bpi >/dev/null 2>&1; then
+	if ! master_alive; then
 		echo "[portmap] master not reachable (мёртв или нет прав на сокет — проверь uid), waiting..."
 		active=()
 		failed=()
+		master_was_down=1
 		sleep 5
 		continue
+	fi
+
+	# соединение только что вернулось — подчистить хвосты прошлой жизни
+	if [ "$master_was_down" = "1" ]; then
+		cleanup_stale
+		master_was_down=0
 	fi
 
 	declare -A want=()
@@ -51,13 +68,14 @@ while true; do
 	# добавить новые
 	for p in "${!want[@]}"; do
 		[ -n "${active[$p]:-}" ] && continue
-		if ssh -O forward -L "127.0.0.1:$p:127.0.0.1:$p" bpi 2>/dev/null; then
+		# stderr ssh не глушим: без него причина отказа теряется, и остаётся гадать
+		if err=$(ssh -O forward -L "127.0.0.1:$p:127.0.0.1:$p" bpi 2>&1); then
 			echo "[portmap] +forward $p"
 			active[$p]=1
 			unset 'failed[$p]'
 		elif [ -z "${failed[$p]:-}" ]; then
 			# логируем один раз, а не каждые 5с
-			echo "[portmap] failed to forward $p (порт занят на host loopback?)"
+			echo "[portmap] failed to forward $p: ${err:-причина неизвестна, ssh промолчал}"
 			failed[$p]=1
 		fi
 	done
@@ -65,11 +83,11 @@ while true; do
 	# снять исчезнувшие
 	for p in "${!active[@]}"; do
 		if [ -z "${want[$p]:-}" ]; then
-			if ssh -O cancel -L "127.0.0.1:$p:127.0.0.1:$p" bpi 2>/dev/null; then
+			if err=$(ssh -O cancel -L "127.0.0.1:$p:127.0.0.1:$p" bpi 2>&1); then
 				echo "[portmap] -forward $p"
 				unset 'active[$p]'
 			else
-				echo "[portmap] failed to cancel $p, keep tracking"
+				echo "[portmap] failed to cancel $p, keep tracking: ${err:-причина неизвестна}"
 			fi
 		fi
 	done
