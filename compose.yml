@@ -1,5 +1,5 @@
 # Исходники образов тянутся из git при build — в рабочей папке нужен только этот
-# файл + host-конфиги (.env, services.map).
+# файл + host-конфиги (.env, compose.override.yml, mutagen.yml, services.map).
 # Пин на ветку. Для детерминизма замени x2-bridge на конкретный коммит: ...git#<sha>.
 # Значения build-args (REMOTE_USER, прокси) берутся из .env рядом с этим файлом.
 x-ctx: &ctx "https://github.com/iiiokojiadbi/agent-space.git#x2-bridge"
@@ -16,14 +16,14 @@ x-proxy-args: &proxy-args
 x-build-hosts: &build-hosts
   - "host.docker.internal:host-gateway"
 
-# сервисы без ssh_config (gateway)
+# сервисы без ssh_config (links, gateway)
 x-build: &build
   context: *ctx
   extra_hosts: *build-hosts
   args:
     <<: *proxy-args
 
-# сервисы, копирующие shared/ssh_config (agent, portmap)
+# сервисы, копирующие shared/ssh_config (agent, folders, portmap)
 x-build-ssh: &build-ssh
   context: *ctx
   extra_hosts: *build-hosts
@@ -32,6 +32,18 @@ x-build-ssh: &build-ssh
     REMOTE_USER: ${REMOTE_USER:-user}
 
 services:
+  links:
+    build:
+      <<: *build
+      dockerfile: links/Dockerfile
+    image: as-links:latest
+    hostname: links
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:2375:2375"
+
   agent:
     build:
       <<: *build-ssh
@@ -40,6 +52,19 @@ services:
     network_mode: host
     command: ["sleep", "infinity"]
     volumes:
+      - ssh-control:/run/ssh-control
+
+  folders:
+    build:
+      <<: *build-ssh
+      dockerfile: folders/Dockerfile
+    image: as-folders:latest
+    hostname: folders
+    restart: unless-stopped
+    depends_on:
+      - agent
+    volumes:
+      - ./mutagen.yml:/workspace/mutagen.yml:ro
       - ssh-control:/run/ssh-control
 
   portmap:
