@@ -1,35 +1,20 @@
 # Ручной вход. Первая команда с ControlMaster auto сама становится мастером и
 # создаёт сокет, следующие сессии цепляются к нему без повторной аутентификации:
 #
-#   ssh -N -R 3128:127.0.0.1:3128 -R 2375:127.0.0.1:2375 bpi   (одно окно)
-#   ssh bpi                                                     (второе окно)
+#   ssh -N bpi     (одно окно, держит мастер-сокет)
+#   ssh bpi        (второе окно, работа)
+#
+# portmap добавляет форварды в этот же мастер через `ssh -O forward`, поэтому
+# отдельных соединений на каждый сервис не открывается.
+#
+# Если нужен прокси хоста на удалённой стороне — добавить в первую команду
+# `-R 3128:127.0.0.1:3128`. Проброс Docker (`-R 2375`) больше не нужен: демон
+# живёт на удалённой стороне.
 Host bpi
     HostName 10.0.1.2
     User __REMOTE_USER__
     ControlMaster auto
     ControlPath /run/ssh-control/cm-%r@%h:%p.sock
-    ServerAliveInterval 30
-    ServerAliveCountMax 3
-    StrictHostKeyChecking accept-new
-    UserKnownHostsFile /run/ssh-control/known_hosts
-
-# Цель для mutagen. Отличается от bpi только тем, что НЕ умеет создавать соединение
-# сама: при живом мастере идёт через сокет (ProxyCommand не вызывается), а без
-# мастера отказывает мгновенно, не открывая сети.
-#
-# Зачем: раньше mutagen ходил через bpi и при мёртвом мастере открывал по
-# соединению на каждую sync-сессию, запрашивая пароль, которого в фоне ввести
-# некому. Десяток таких попыток за секунду выглядит для защиты от подбора как
-# атака — и мост банится целиком, вместе с ручным SSH и пробросом портов.
-#
-# ControlPath совпадает с bpi, поэтому мастер, поднятый руками, обслуживает и mutagen.
-Host bpi-sync
-    HostName 10.0.1.2
-    User __REMOTE_USER__
-    ControlMaster no
-    ControlPath /run/ssh-control/cm-%r@%h:%p.sock
-    ProxyCommand /bin/false
-    BatchMode yes
     ServerAliveInterval 30
     ServerAliveCountMax 3
     StrictHostKeyChecking accept-new
