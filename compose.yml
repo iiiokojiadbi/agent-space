@@ -1,5 +1,5 @@
 # Исходники образов тянутся из git при build — в рабочей папке нужен только этот
-# файл + host-конфиги (.env, compose.override.yml, services.map).
+# файл + host-конфиги (.env, services.map).
 # Пин на ветку. Для детерминизма замени x2-bridge на конкретный коммит: ...git#<sha>.
 # Значения build-args (REMOTE_USER, прокси) берутся из .env рядом с этим файлом.
 x-ctx: &ctx "https://github.com/iiiokojiadbi/agent-space.git#x2-bridge"
