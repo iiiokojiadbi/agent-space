@@ -7,7 +7,8 @@ ARG REMOTE_USER=user
 RUN apk add --no-cache \
     openssh-client \
     ca-certificates \
-    bash
+    bash \
+    socat
 
 RUN addgroup -g ${USER_GID} app && \
     adduser -D -u ${USER_UID} -G app -s /bin/sh app && \
@@ -17,6 +18,7 @@ RUN addgroup -g ${USER_GID} app && \
 COPY --chown=${USER_UID}:${USER_GID} --chmod=600 shared/ssh_config /home/app/.ssh/config
 RUN sed -i "s/__REMOTE_USER__/${REMOTE_USER}/" /home/app/.ssh/config
 COPY --chown=${USER_UID}:${USER_GID} --chmod=755 portmap/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=${USER_UID}:${USER_GID} --chmod=755 portmap/egress-connect /usr/local/bin/egress-connect
 
 USER app
 WORKDIR /home/app
